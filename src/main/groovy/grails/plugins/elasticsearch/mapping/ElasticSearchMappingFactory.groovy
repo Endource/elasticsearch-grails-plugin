@@ -146,6 +146,8 @@ class ElasticSearchMappingFactory {
             propType = 'geo_point'
         } else if(scpm.isAttachment()) {
             propType = 'attachment'
+        } else if (Map.isAssignableFrom(scpm.grailsProperty.type)) {
+            propType = 'object'
         } else {
             propType = scpm.grailsProperty.getTypePropertyName()
 
