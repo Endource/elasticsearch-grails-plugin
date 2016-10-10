@@ -177,41 +177,48 @@ class DomainClassUnmarshaller implements DataBinder {
             parseResult = (propertyValue as JSON).toString()
         } else if (null != scpm && propertyValue instanceof Map) {
 
-            Map<String, Object> data = (Map<String, Object>) propertyValue
-
-            // Handle cycle reference
-            if (data.containsKey("ref")) {
-                unmarshallingContext.addCycleRef(propertyValue)
-                return null
-            }
-
-            // Searchable reference.
-            if (scpm.reference != null) {
-                Class<?> refClass = scpm.bestGuessReferenceType
-                GrailsDomainClass refDomainClass
-                for (GrailsClass dClazz : grailsApplication.getArtefacts(DomainClassArtefactHandler.TYPE)) {
-                    if (dClazz.clazz.equals(refClass)) {
-                        refDomainClass = dClazz
-                        break
-                    }
+            if(propertyIsMap(domainClass, propertyName) && !isObject(propertyValue)) {
+                parseResult = propertyValue.collectEntries { String key, def value ->
+                    unmarshallingContext.unmarshallingStack.push(key)
+                    Object parsedValue = unmarshallProperty(domainClass, propertyName, value, unmarshallingContext)
+                    [ (key) : parsedValue ]
                 }
-                Assert.state(refDomainClass != null, "Found reference to non-domain class: $refClass")
-                return unmarshallReference(refDomainClass, data, unmarshallingContext)
-            }
+            } else {
+                Map<String, Object> data = (Map<String, Object>) propertyValue
 
-            if (data.containsKey("class") && (Boolean) grailsApplication.flatConfig.get('elasticSearch.unmarshallComponents')) {
-                // Embedded instance.
-                if (!scpm.isComponent()) {
-                    // maybe ignore?
-                    throw new IllegalStateException("Property ${domainClass.name}.${propertyName} is not mapped as [component], but broken search hit found.")
+                // Handle cycle reference
+                if (data.containsKey("ref")) {
+                    unmarshallingContext.addCycleRef(propertyValue)
+                    return null
                 }
-                GrailsDomainClass nestedDomainClass = ((GrailsDomainClass) grailsApplication.getArtefact(DomainClassArtefactHandler.TYPE, (String) data.get('class')))
-                if (domainClass != null) {
-                    // Unmarshall 'component' instance.
-                    if (!scpm.isComponent()) {
-                        throw new IllegalStateException("Object ${data.get('class')} found in index, but [$propertyName] is not mapped as component.")
+
+                // Searchable reference.
+                if (scpm.reference != null) {
+                    Class<?> refClass = scpm.bestGuessReferenceType
+                    GrailsDomainClass refDomainClass
+                    for (GrailsClass dClazz : grailsApplication.getArtefacts(DomainClassArtefactHandler.TYPE)) {
+                        if (dClazz.clazz.equals(refClass)) {
+                            refDomainClass = dClazz
+                            break
+                        }
                     }
-                    parseResult = unmarshallDomain(nestedDomainClass, data.get('id'), data, unmarshallingContext)
+                    Assert.state(refDomainClass != null, "Found reference to non-domain class: $refClass")
+                    return unmarshallReference(refDomainClass, data, unmarshallingContext)
+                }
+
+                if (data.containsKey("class") && (Boolean) grailsApplication.flatConfig.get('elasticSearch.unmarshallComponents')) {
+                    // Embedded instance.
+                    if (!scpm.isComponent() && !propertyIsMap(domainClass, propertyName)) {
+                        throw new IllegalStateException("Property ${domainClass.name}.${propertyName} is not mapped as [component], but broken search hit found.")
+                    }
+                    GrailsDomainClass nestedDomainClass = ((GrailsDomainClass) grailsApplication.getArtefact(DomainClassArtefactHandler.TYPE, (String) data.get('class')))
+                    if (domainClass != null) {
+                        // Unmarshall 'component' instance.
+                        if (!scpm.isComponent() && !propertyIsMap(domainClass, propertyName)) {
+                            throw new IllegalStateException("Object ${data.get('class')} found in index, but [$propertyName] is not mapped as component.")
+                        }
+                        parseResult = unmarshallDomain(nestedDomainClass, data.get('id'), data, unmarshallingContext)
+                    }
                 }
             }
         } else if (propertyValue instanceof Collection) {
@@ -311,5 +318,21 @@ class DomainClassUnmarshaller implements DataBinder {
 
     void setElasticSearchClient(Client elasticSearchClient) {
         this.elasticSearchClient = elasticSearchClient
+    }
+
+    private boolean propertyIsMap(GrailsDomainClass domainClass, String propertyName) {
+        Map.isAssignableFrom(domainClass.getPropertyByName(propertyName).type)
+    }
+
+    private boolean isObject(Map map) {
+        boolean object = false
+        try {
+            object = map.containsKey('class') && Class.forName(map['class'])
+        } catch(ClassNotFoundException e) {
+            //It's not. Do nothing
+        } catch(Exception e) {
+            //Unexpected
+        }
+        return object
     }
 }

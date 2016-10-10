@@ -5,14 +5,13 @@ import grails.plugins.elasticsearch.ElasticSearchHelper
 import grails.plugins.elasticsearch.ElasticSearchService
 import grails.test.mixin.integration.Integration
 import grails.transaction.Rollback
-import org.elasticsearch.action.admin.indices.mapping.get.GetMappingsRequest
 import org.elasticsearch.action.admin.indices.mapping.get.GetMappingsResponse
-import org.elasticsearch.action.get.GetResponse
 import org.elasticsearch.client.Client
 import org.elasticsearch.cluster.metadata.MappingMetaData
 import org.elasticsearch.index.query.QueryBuilders
 import org.springframework.beans.factory.annotation.Autowired
 import spock.lang.Specification
+import test.Store
 import test.map.MapTest
 
 
@@ -63,7 +62,7 @@ class MapRelationshipsSpec extends Specification {
         }
 
         then: "It keeps the expected structure"
-        source.keySet() == ['strings'] as Set
+        source.keySet().contains('strings')
         source['strings'].keySet() == ['1', '2'] as Set
         source['strings']['1'] == 'one'
         source['strings']['2'] == 'two'
@@ -75,6 +74,37 @@ class MapRelationshipsSpec extends Specification {
         search.total == 1
         search.searchResults[0].strings instanceof Map
         search.searchResults[0].strings == test.strings
+    }
+
+    def "Maps of objects are indexed properly"() {
+
+        when:
+        Store tesco = new Store(name: 'Tesco', owner: 'Jack Cohen', description: 'The Tesco brand first appeared in 1924. The name came about after Jack Cohen bought a shipment of tea from Thomas Edward Stockwell.')
+        Store greggs = new Store(name: 'Greggs', owner: 'John Gregg', description: 'Greggs was founded by John Gregg as a Tyneside bakery in 1939.')
+        MapTest test = new MapTest(strings: ['1' : 'one', '2' : 'two'])
+        test.stores = [supermarket: tesco, bakery: greggs]
+        test.save(failOnError:true)
+
+        and:
+        elasticSearchService.index(test)
+        elasticSearchAdminService.refresh(MapTest)
+
+        then:
+        Map search = MapTest.search('tesco greggs')
+        search.total == 1
+        MapTest returned = search.searchResults[0]
+        returned.stores.size() == 2
+        returned.stores.keySet() == ['supermarket', 'bakery'] as Set
+        returned.stores['supermarket'] instanceof Store
+        returned.stores['supermarket'].name == tesco.name
+        returned.stores['supermarket'].description == tesco.description
+        returned.stores['supermarket'].owner == tesco.owner
+        returned.stores['bakery'] instanceof Store
+        returned.stores['bakery'].name == greggs.name
+        returned.stores['bakery'].description == greggs.description
+        returned.stores['bakery'].owner == greggs.owner
+
+
     }
 
 }
