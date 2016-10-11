@@ -58,15 +58,10 @@ class JSONDomainFactory {
         def marshaller
         def objectClass = object.getClass()
 
-        // Resolve collections.
-        // Check for direct marshaller matching
-        if (object instanceof Collection) {
-            marshaller = new CollectionMarshaller()
-        }
-
-        if (!marshaller && DEFAULT_MARSHALLERS[objectClass]) {
-            marshaller = DEFAULT_MARSHALLERS[objectClass].newInstance()
-        }
+        // Resolve default marshallers
+        marshaller = DEFAULT_MARSHALLERS.find {
+            it.key.isAssignableFrom(objectClass)
+        }?.value?.newInstance()
 
         if (!marshaller) {
 

@@ -103,8 +103,41 @@ class MapRelationshipsSpec extends Specification {
         returned.stores['bakery'].name == greggs.name
         returned.stores['bakery'].description == greggs.description
         returned.stores['bakery'].owner == greggs.owner
+    }
 
+    def "Map of lists are indexed and retrieved properly"() {
+        when:
+        List<Store> local = [ new Store(name: 'Off-license'), new Store(name: 'Bakery')]
+        List<Store> supermarket = [ new Store(name: "Sainsbury's"), new Store(name: 'Waitrose')]
+        List<String> spellOne = ['o','n','e']
+        List<String> spellTwo = ['t','w','o']
+        MapTest test = new MapTest(moreStrings: ['1' : spellOne, '2' : spellTwo], moreStores: ['local': local, supermarket: supermarket])
+        test.save(failOnError: true)
 
+        and:
+        elasticSearchService.index(test)
+        elasticSearchAdminService.refresh(MapTest)
+
+        then:
+        Map search = MapTest.search('Bakery')
+        search.total == 1
+        MapTest returned = search.searchResults[0]
+
+        and:
+        returned.moreStrings.size() == 2
+        returned.moreStrings.keySet() == ['1', '2'] as Set
+        returned.moreStrings['1'] == ['o', 'n', 'e']
+        returned.moreStrings['2'] == ['t', 'w', 'o']
+
+        and:
+        returned.moreStores.size() == 2
+        returned.moreStores.keySet() == ['local', 'supermarket'] as Set
+        returned.moreStores['local'] instanceof List
+        returned.moreStores['local'][0].name == 'Off-license'
+        returned.moreStores['local'][1].name == 'Bakery'
+        returned.moreStores['supermarket'] instanceof List
+        returned.moreStores['supermarket'][0].name == "Sainsbury's"
+        returned.moreStores['supermarket'][1].name == "Waitrose"
     }
 
 }

@@ -55,18 +55,18 @@ class DefaultMarshallingContext {
     }
 
     def peekDomainObject() {
-        if (marshallStack.empty) {
-            return null
+        MarshalledObject contextElement
+        Stack reverseStack = new Stack()
+
+        // Parent could be a persistent collection or map so we traverse through the ancestors
+        while((contextElement == null || Collection.isAssignableFrom(contextElement.instance.getClass()) || Map.isAssignableFrom(contextElement.instance.getClass())) && !marshallStack.empty()) {
+            contextElement = marshallStack.pop()
+            reverseStack.push(contextElement)
         }
-        def o = marshallStack.peek().instance
-        // Parent could be a persistent collection. In this case,
-        // try grandparent as a workaround.
-        if (o instanceof Collection || o instanceof Map) {
-            def top = marshallStack.pop()
-            o = marshallStack.peek().instance
-            marshallStack.push(top)
+        while(!reverseStack.empty()) {
+            marshallStack.push(reverseStack.pop())
         }
-        o
+        contextElement.instance
     }
 
     def delegateMarshalling(object, maxDepth = 0) {
