@@ -119,7 +119,7 @@ class MapRelationshipsSpec extends Specification {
         elasticSearchAdminService.refresh(MapTest)
 
         then:
-        Map search = MapTest.search('Bakery')
+        Map search = MapTest.search('Waitrose')
         search.total == 1
         MapTest returned = search.searchResults[0]
 
